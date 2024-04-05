@@ -22,32 +22,62 @@ const visiterPost = async(req, res) => {
     }
 };
 
-const saltround = 10;
+const saltround = 10; // Number of rounds for bcrypt hashing
 
 const visterSignin = async(req, res) => {
+    const { username, email, password } = req.body;
+
     try {
-        const { username, email, password } = req.body || {};
+        // Check if any required field is missing
         if (!username || !email || !password) {
             return res.status(400).json({ message: 'All fields are required' });
         }
-        const existingUser = await User.findOne({ username });
-        if (existingUser) {
-            return res.status(400).json({ message: 'Username already exists' });
-        }
+
+        // Check if the email is already registered
         const existingEmail = await User.findOne({ email });
         if (existingEmail) {
             return res.status(400).json({ message: 'Email already exists' });
         }
-        const user = await User.create({ username, email, password });
-        res.status(200).json({ message: 'User created successfully', user });
-        // console.log("user created");
 
+        // Hash the password before saving it
+        const hashedPassword = await bcrypt.hash(password, saltround);
+
+        // Create a new user with hashed password
+        const newUser = await User.create({ username, email, password: hashedPassword });
+
+        // Generate a JWT token for the newly registered user
+        const token = jwt.sign({ userId: newUser._id }, 'your_secret_key', { expiresIn: '1h' });
+
+        res.status(201).json({ message: 'User created successfully', user: newUser, token });
     } catch (error) {
-        res.status(500).json({ message: 'Error in signin ', error });
+        res.status(500).json({ message: 'Error creating user', error });
+    }
+};
+
+//login here
+const visiterLogin = async(req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: 'All fields are required (email and password)' });
+    }
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const passwordMatch = await bcrypt.compare(password, user.password);
+        if (!passwordMatch) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Generate a JWT token for authentication
+        const token = jwt.sign({ userId: user._id }, 'your_secret_key', { expiresIn: '3d' });
+
+        res.status(200).json({ message: 'Login successful', token });
+    } catch (error) {
+        res.status(500).json({ message: 'Error in login', error });
     }
 }
 
-const visiterLogin = async(req, res) => {
-
-}
 module.exports = { visterList, visiterPost, visterSignin, visiterLogin, }
